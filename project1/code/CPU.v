@@ -1,89 +1,194 @@
+`include "opcodes.vh"
+
 module CPU (
     clk_i, rst_i, start_i
 );
 
 // Ports
-input               clk_i;
-input               rst_i;
-input               start_i;
+input               clk_i, rst_i, start_i;
 
-wire [31:0] pc_current, pc_next, instruction;
-wire [31:0] extended;
+wire                tmp_RegWrite;
+wire        [31:0]  tmp_Immediate;
+reg                 RegWrite    = 1'b0;
+reg         [31:0]  Immediate   = 32'b0;
+always @( tmp_RegWrite  ) begin RegWrite    <= tmp_RegWrite;    end
+always @( tmp_Immediate ) begin Immediate   <= tmp_Immediate;   end
 
-wire [1:0]  ctrl_ALUOp;
-wire        ctrl_RegDst, ctrl_ALUSrc, ctrl_RegWrite;
-
-wire [31:0] RS_data, RD_data;
-
-wire [31:0] MUX_result;
-
-wire [2:0]  ALU_ctrl;
-wire [31:0] ALU_result;
-wire        zero;
-
-PC PC (
-    .clk_i      ( clk_i      ),
-    .rst_i      ( rst_i      ),
-    .start_i    ( start_i    ),
-    .pc_i       ( pc_next    ),
-    .pc_o       ( pc_current )
+Control Control (
+    .funct_i    ( { IFID.inst_o[31:25], IFID.inst_o[14:12] }    ),
+    .opcode_i   ( IFID.inst_o[ 6: 0]                            ),
+    .data_o     ()
 );
 
-Adder Add_PC (
-    .data1_i    ( pc_current ),
-    .data2_i    ( 32'd4      ),
-    .data_o     ( pc_next    )
+Adder Adder_PC (
+    .data1_i    ( PC.pc_o   ),
+    .data2_i    ( 32'd4     ),
+    .data_o     ()
+);
+
+PC PC (
+    .clk_i      ( clk_i                             ),
+    .rst_i      ( rst_i                             ),
+    .start_i    ( start_i                           ),
+    .hazard_i   ( Hazard_Detection_Unit.hazard_o    ),
+    .pc_i       ( MUX_PC.data_o                     ),
+    .pc_o       ()
+);
+
+MUX32 MUX_PC (
+    .data1_i    ( Adder_PC.data_o                   ),
+    .data2_i    ( Adder_Branch.data_o               ),
+    .select_i   ( Branch_Detection_Unit.data_o      ),
+    .data_o     ()
+);
+
+Adder_Branch Adder_Branch (
+    .data1_i    ( IFID.pc_o ),
+    .data2_i    ( Immediate ),    
+    .data_o     ()
 );
 
 Instruction_Memory Instruction_Memory (
-    .addr_i     ( pc_current  ), 
-    .instr_o    ( instruction )
+    .addr_i     ( PC.pc_o   ),
+    .inst_o     ()
 );
 
-Control Control (
-    .Op_i       ( instruction [6:0] ),
-    .RegDst_o   ( ctrl_RegDst       ),
-    .ALUOp_o    ( ctrl_ALUOp        ),
-    .ALUSrc_o   ( ctrl_ALUSrc       ),
-    .RegWrite_o ( ctrl_RegWrite     )
+IFID IFID (
+    .clk_i          ( clk_i                             ),
+    .pc_i           ( PC.pc_o                           ),
+    .inst_i         ( Instruction_Memory.inst_o         ),
+    .hazard_i       ( Hazard_Detection_Unit.hazard_o    ),
+    .branch_i       ( Branch_Detection_Unit.data_o      ),
+    .pc_o           (),
+    .inst_o         ()
 );
 
 Registers Registers (
-    .clk_i      ( clk_i               ),
-    .RSaddr_i   ( instruction [19:15] ),
-    .RTaddr_i   ( instruction [24:20] ),
-    .RDaddr_i   ( instruction [11:7]  ), 
-    .RDdata_i   ( ALU_result          ),
-    .RegWrite_i ( ctrl_RegWrite       ), 
-    .RSdata_o   ( RS_data             ), 
-    .RTdata_o   ( RD_data             ) 
-);
- 
-Sign_Extend Sign_Extend (
-    .data_i     ( instruction ),
-    .data_o     ( extended    )
+    .clk_i      ( clk_i                 ),
+    .RS1addr_i  ( IFID.inst_o[19:15]    ),
+    .RS2addr_i  ( IFID.inst_o[24:20]    ),
+    .RDaddr_i   ( MEMWB.RDaddr_o        ), 
+    .RDdata_i   ( MEMWB.WB_Data_o       ),
+    .RegWrite_i ( RegWrite              ), 
+    .RS1data_o  (), 
+    .RS2data_o  () 
 );
 
-MUX32 MUX_ALUSrc (
-    .data1_i    ( RD_data     ),
-    .data2_i    ( extended    ),
-    .select_i   ( ctrl_ALUSrc ),
-    .data_o     ( MUX_result  )
+Branch_Detection_Unit Branch_Detection_Unit (
+    .control_i  ( Control.data_o        ),
+    .data1_i    ( Registers.RS1data_o   ),
+    .data2_i    ( Registers.RS2data_o   ),    
+    .data_o     ()
+);
+
+Immediate_Generator Immediate_Generator (
+    .instr_i    ( IFID.inst_o           ),
+    .data_o     ( tmp_Immediate         )
+);
+
+Hazard_Detection_Unit Hazard_Detection_Unit (
+    .IFID_RS1addr_i ( IFID.inst_o[19:15]            ),
+    .IFID_RS2addr_i ( IFID.inst_o[24:20]            ),
+    .IDEX_MemRead_i ( IDEX.control_o === `Ctrl_LW   ),
+    .IDEX_RDaddr_i  ( IDEX.RDaddr_o                 ),
+    .hazard_o       ()
+);
+
+IDEX IDEX (
+    .clk_i          ( clk_i                             ),
+    .control_i      ( Control.data_o                    ),
+    .RS1data_i      ( Registers.RS1data_o               ),
+    .RS2data_i      ( Registers.RS2data_o               ),
+    .immediate_i    ( Immediate                         ),
+    .RS1addr_i      ( IFID.inst_o[19:15]                ),
+    .RS2addr_i      ( IFID.inst_o[24:20]                ),
+    .RDaddr_i       ( IFID.inst_o[11: 7]                ),
+    .hazard_i       ( Hazard_Detection_Unit.hazard_o    ),
+    .control_o      (),
+    .RS1data_o      (),
+    .RS2data_o      (),
+    .immediate_o    (),
+    .RS1addr_o      (),
+    .RS2addr_o      (),
+    .RDaddr_o       ()
+);
+
+MUX32 MUX_ALU_Src (
+    .data1_i    ( IDEX.RS2data_o                        ),
+    .data2_i    ( IDEX.immediate_o                      ),
+    .select_i   ( (IDEX.control_o === `Ctrl_ADDI) ||
+                  (IDEX.control_o === `Ctrl_LW)   ||
+                  (IDEX.control_o === `Ctrl_SW)         ),
+    .data_o     ()
+);
+
+MUX32_Forwarding MUX_ForwardA (
+    .data1_i    ( IDEX.RS1data_o                ),
+    .data2_i    ( MEMWB.WB_Data_o               ),
+    .data3_i    ( EXMEM.ALUResult_o             ),
+    .select_i   ( Forwarding_Unit.ForwardA_o    ),
+    .data_o     ()
+);
+
+MUX32_Forwarding MUX_ForwardB (
+    .data1_i    ( MUX_ALU_Src.data_o            ),
+    .data2_i    ( MEMWB.WB_Data_o               ),
+    .data3_i    ( EXMEM.ALUResult_o             ),
+    .select_i   ( Forwarding_Unit.ForwardB_o    ),
+    .data_o     ()
+);
+
+Forwarding_Unit Forwarding_Unit (
+    .IDEX_RS1addr_i     ( IDEX.RS1addr_o                        ),
+    .IDEX_RS2addr_i     ( IDEX.RS2addr_o                        ),
+    .EXMEM_RDaddr_i     ( EXMEM.RDaddr_o                        ),
+    .MEMWB_RDaddr_i     ( MEMWB.RDaddr_o                        ),
+    .EXMEM_RegWrite_i   ( (EXMEM.control_o !== `Ctrl_SW ) && 
+                          (EXMEM.control_o !== `Ctrl_BEQ)       ),
+    .MEMWB_RegWrite_i   ( (MEMWB.control_o !== `Ctrl_SW ) && 
+                          (MEMWB.control_o !== `Ctrl_BEQ)       ),
+    .ForwardA_o         (),
+    .ForwardB_o         ()
 );
 
 ALU ALU (
-    .data1_i    ( RS_data    ),
-    .data2_i    ( MUX_result ),
-    .ALUCtrl_i  ( ALU_ctrl   ),
-    .data_o     ( ALU_result ),
-    .Zero_o     ( zero       )
+    .data1_i    ( MUX_ForwardA.data_o   ),
+    .data2_i    ( MUX_ForwardB.data_o   ),
+    .control    ( IDEX.control_o        ),
+    .data_o     ()
 );
 
-ALU_Control ALU_Control (
-    .funct_i    ( { instruction[31:25], instruction[14:12] } ),
-    .ALUOp_i    ( ctrl_ALUOp ),
-    .ALUCtrl_o  ( ALU_ctrl   )
+EXMEM EXMEM (
+    .clk_i          ( clk_i             ),
+    .control_i      ( IDEX.control_o    ),
+    .ALUResult_i    ( ALU.data_o        ),
+    .RS2data_i      ( IDEX.RS2data_o    ),
+    .RDaddr_i       ( IDEX.RDaddr_o     ),
+    .control_o      (),
+    .ALUResult_o    (),
+    .RS2data_o      (),
+    .RDaddr_o       ()
+);
+
+Data_Memory Data_Memory (
+    .clk_i      ( clk_i                         ),
+    .memAddr_i  ( EXMEM.ALUResult_o             ),
+    .memData_i  ( EXMEM.RS2data_o               ),
+    .memRead_i  ( EXMEM.control_o === `Ctrl_LW  ),
+    .memWrite_i ( EXMEM.control_o === `Ctrl_SW  ),
+    .memData_o  ()
+);
+
+MEMWB MEMWB (
+    .clk_i          ( clk_i                 ),
+    .control_i      ( EXMEM.control_o       ),
+    .memData_i      ( Data_Memory.memData_o ),
+    .ALUResult_i    ( EXMEM.ALUResult_o     ),
+    .RDaddr_i       ( EXMEM.RDaddr_o        ),
+    .RegWrite_o     ( tmp_RegWrite          ),
+    .control_o      (),
+    .WB_Data_o      (),
+    .RDaddr_o       ()
 );
 
 endmodule
-

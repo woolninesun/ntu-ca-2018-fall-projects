@@ -1,35 +1,30 @@
 `include "opcodes.vh"
 
-module Control ( 
-    Op_i, RegDst_o, ALUOp_o, ALUSrc_o, RegWrite_o
+module Control (
+    funct_i, opcode_i,
+    data_o
 );
 
-input   [6:0]   Op_i;
-output          RegDst_o;
-output  [1:0]   ALUOp_o;
-output          ALUSrc_o;
-output          RegWrite_o;
+input       [9:0]   funct_i;
+input       [6:0]   opcode_i;
+output  reg [3:0]   data_o;
 
-reg             RegDst_o, ALUSrc_o, RegWrite_o;
-reg     [1:0]   ALUOp_o;
-
-always @( Op_i ) begin
-    case( Op_i )
-        `Opcode_R_type:
-        begin
-            RegDst_o   = 1'b0;
-            ALUOp_o    = `ALUOp_R_type;
-            ALUSrc_o   = 1'b0;
-            RegWrite_o = 1'b1;
+always @( * ) begin
+    case ( opcode_i )
+        `Opcode_R_TYPE  : begin
+            case ( funct_i )
+                `Funct_OR   : data_o = `Ctrl_OR;
+                `Funct_AND  : data_o = `Ctrl_AND;
+                `Funct_ADD  : data_o = `Ctrl_ADD;
+                `Funct_SUB  : data_o = `Ctrl_SUB;
+                `Funct_MUL  : data_o = `Ctrl_MUL;
+            endcase
         end
-
-        `Opcode_I_type:
-        begin
-            RegDst_o   = 1'b0;
-            ALUOp_o    = `ALUOp_I_type;
-            ALUSrc_o   = 1'b1;
-            RegWrite_o = 1'b1;
-        end
+        `Opcode_ADDI    : data_o = `Ctrl_ADDI;
+        `Opcode_LW      : data_o = `Ctrl_LW;
+        `Opcode_SW      : data_o = `Ctrl_SW;
+        `Opcode_BEQ     : data_o = `Ctrl_BEQ;
+        default         : data_o = `Ctrl_NOP;
     endcase
 end
 
