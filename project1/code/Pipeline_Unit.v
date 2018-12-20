@@ -37,7 +37,7 @@ output  reg [31:0]  RS1data_o, RS2data_o, immediate_o;
 output  reg [ 4:0]  RS1addr_o, RS2addr_o, RDaddr_o;
 
 always @( posedge clk_i ) begin
-    control_o   <= ( hazard_i ) ? 4'b1111 : control_i;
+    control_o   <= ( hazard_i ) ? `Ctrl_NOP : control_i;
     RS1data_o   <= RS1data_i;
     RS2data_o   <= RS2data_i;
     immediate_o <= immediate_i;
@@ -89,11 +89,15 @@ output  reg         RegWrite_o;
 
 always @( posedge clk_i ) begin
     control_o   <= control_i;
-    WB_Data_o   <= ( control_i == `Ctrl_LW )? memData_i:ALUResult_i;
+    WB_Data_o   <= ( control_i == `Ctrl_LW )? memData_i: ALUResult_i;
     RDaddr_o    <= RDaddr_i;
-    RegWrite_o  <= ( control_i == `Ctrl_SW  ) ? 0:
-                   ( control_i == `Ctrl_BEQ ) ? 0:
-                   ( control_i == `Ctrl_NOP ) ? 0:1;
+
+    casex ( control_i )
+        `Ctrl_SW    : begin RegWrite_o <= 0; end
+        `Ctrl_BEQ   : begin RegWrite_o <= 0; end
+        `Ctrl_NOP   : begin RegWrite_o <= 0; end
+        default     : begin RegWrite_o <= 1; end
+    endcase
 end
 
 endmodule
