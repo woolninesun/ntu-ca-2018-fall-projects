@@ -74,7 +74,7 @@ endmodule
 
 module MEMWB (
     clk_i, control_i, memData_i, ALUResult_i, RDaddr_i,
-    control_o, WB_Data_o, RDaddr_o, RegWrite_o
+    control_o, WBdata_o, RDaddr_o, RegWrite_o
 );
 
 input               clk_i;
@@ -83,13 +83,13 @@ input       [31:0]  memData_i;
 input       [31:0]  ALUResult_i;
 input       [ 4:0]  RDaddr_i;
 output  reg [ 3:0]  control_o;
-output  reg [31:0]  WB_Data_o;
+output  reg [31:0]  WBdata_o;
 output  reg [ 4:0]  RDaddr_o;
 output  reg         RegWrite_o;
 
 always @( posedge clk_i ) begin
     control_o   <= control_i;
-    WB_Data_o   <= ( control_i == `Ctrl_LW )? memData_i: ALUResult_i;
+    WBdata_o    <= ( control_i == `Ctrl_LW )? memData_i: ALUResult_i;
     RDaddr_o    <= RDaddr_i;
 
     casex ( control_i )

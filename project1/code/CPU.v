@@ -68,7 +68,7 @@ Registers Registers (
     .RS1addr_i  ( IFID.inst_o[19:15]    ),
     .RS2addr_i  ( IFID.inst_o[24:20]    ),
     .RDaddr_i   ( MEMWB.RDaddr_o        ), 
-    .RDdata_i   ( MEMWB.WB_Data_o       ),
+    .RDdata_i   ( MEMWB.WBdata_o        ),
     .RegWrite_i ( RegWrite              ), 
     .RS1data_o  (), 
     .RS2data_o  () 
@@ -124,7 +124,7 @@ MUX32 MUX_ALU_Src (
 
 MUX32_Forwarding MUX_ForwardA (
     .data1_i    ( IDEX.RS1data_o                ),
-    .data2_i    ( MEMWB.WB_Data_o               ),
+    .data2_i    ( MEMWB.WBdata_o                ),
     .data3_i    ( EXMEM.ALUResult_o             ),
     .select_i   ( Forwarding_Unit.ForwardA_o    ),
     .data_o     ()
@@ -132,7 +132,7 @@ MUX32_Forwarding MUX_ForwardA (
 
 MUX32_Forwarding MUX_ForwardB (
     .data1_i    ( MUX_ALU_Src.data_o            ),
-    .data2_i    ( MEMWB.WB_Data_o               ),
+    .data2_i    ( MEMWB.WBdata_o               ),
     .data3_i    ( EXMEM.ALUResult_o             ),
     .select_i   ( Forwarding_Unit.ForwardB_o    ),
     .data_o     ()
@@ -187,7 +187,7 @@ MEMWB MEMWB (
     .RDaddr_i       ( EXMEM.RDaddr_o        ),
     .RegWrite_o     ( tmp_RegWrite          ),
     .control_o      (),
-    .WB_Data_o      (),
+    .WBdata_o       (),
     .RDaddr_o       ()
 );
 
