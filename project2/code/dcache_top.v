@@ -123,9 +123,9 @@ assign hit           = (sram_tag == p1_tag && sram_valid)? 1'b1 : 1'b0;
 assign r_hit_data    = (hit)? sram_cache_data : mem_data_i;
 	
 // read data :  256-bit to 32-bit
-always@(p1_offset or r_hit_data) begin
+always@(p1_offset or sram_cache_data ) begin
 	//!!! add you code here! (p1_data=...?)
-	p1_data = (hit)? r_hit_data[(p1_offset>>2)*32 +: 32] : 32'b0;
+	p1_data = sram_cache_data[(p1_offset>>2)*32 +: 32];
 end
 
 
@@ -161,7 +161,7 @@ always@(posedge clk_i or negedge rst_i) begin
 					state <= STATE_MISS;
 				end
 				else begin
-					state <= STATE_IDLE;
+					state <= STATE_IDLE; 
 				end
 			end
 			STATE_MISS: begin
